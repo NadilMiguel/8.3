@@ -26,95 +26,101 @@ const TableView = ({ products }: TableViewProps) => {
     exportToFile,
   } = useTableExport();
 
+  /** Enriquecemos los productos con la columna "pack of:" editable */
   useEffect(() => {
     if (products && products.length > 0) {
       const enrichedProducts = products.map((item) => ({
         ...item,
-        ['pack of:']: Number(item['pack of:']) > 0 ? Math.floor(Number(item['pack of:'])) : 1, // Asegura un número natural positivo
+        ['pack of:']: Number(item['pack of:']) > 0
+          ? Math.floor(Number(item['pack of:']))
+          : 1,
       }));
-      const extractedColumns = extractColumns(enrichedProducts);
-      
-      // Modificar la definición de la columna "pack of:" para hacerla editable
-      const columnsWithEditable = extractedColumns.map(col => {
-        if (col.key === 'pack of:') {
-          return {
-            ...col,
-            editable: true,
-            type: 'number',
-            onEdit: (value, record, index) => {
-              // Convertir a número y validar que sea un natural positivo
-              const numValue = Number(value);
-              if (numValue > 0 && Number.isInteger(numValue)) {
-                return numValue;
+
+      /* --------------------------------------
+         Extraemos columnas dinámicamente
+      -------------------------------------- */
+      const extractColumns = (data: any[]): Column[] => {
+        const allKeys = new Set<string>();
+        data.forEach((row) => Object.keys(row).forEach((k) => allKeys.add(k)));
+
+        return Array.from(allKeys).map((key) => {
+          let type: 'string' | 'number' | 'date' = 'string';
+          for (const row of data) {
+            const value = row[key];
+            if (value !== undefined && value !== null && value !== '') {
+              if (!isNaN(parseFloat(value))) {
+                type = 'number';
+              } else if (
+                /^\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(value) ||
+                /^\d{1,2}[-/]\d{1,2}[-/]\d{4}/.test(value)
+              ) {
+                type = 'date';
               }
-              return record['pack of:']; // Mantener el valor anterior si no es válido
+              break;
             }
+          }
+          return {
+            key,
+            label: key
+              .replace(/([A-Z])/g, ' $1')
+              .replace(/^./, (s) => s.toUpperCase())
+              .replace(/:/g, '')
+              .trim(),
+            type,
           };
-        }
-        return col;
-      });
-      
+        });
+      };
+
+      const extractedColumns = extractColumns(enrichedProducts);
+
+      const columnsWithEditable = extractedColumns.map((col) =>
+        col.key === 'pack of:'
+          ? {
+              ...col,
+              editable: true,
+              type: 'number',
+            }
+          : col
+      );
+
       setColumns(columnsWithEditable);
-      setVisibleColumns(columnsWithEditable.map(col => col.key));
-      setApiData(products);
-      setFilteredData(products);
+      setVisibleColumns(columnsWithEditable.map((c) => c.key));
+      setApiData(enrichedProducts);
+      setFilteredData(enrichedProducts);
     }
   }, [products]);
 
-  const extractColumns = (data: any[]): Column[] => {
-    const allKeys = new Set<string>();
-    data.forEach(item => Object.keys(item).forEach(key => allKeys.add(key)));
-
-    return Array.from(allKeys).map(key => {
-      let type: 'string' | 'number' | 'date' = 'string';
-      for (const item of data) {
-        const value = item[key];
-        if (value !== undefined && value !== null && value !== '') {
-          if (!isNaN(parseFloat(value))) {
-            type = 'number';
-          } else if (
-            /^\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(value) ||
-            /^\d{1,2}[-/]\d{1,2}[-/]\d{4}/.test(value)
-          ) {
-            type = 'date';
-          }
-          break;
-        }
-      }
-      return {
-        key,
-        label: key
-          .replace(/([A-Z])/g, ' $1')
-          .replace(/^./, str => str.toUpperCase())
-          .replace(/:/g, '')
-          .trim(),
-        type,
-      };
-    });
-  };
-
+  /* ---------------------------------------
+     Column toggle
+  --------------------------------------- */
   const toggleColumn = (columnKey: string) => {
-    setVisibleColumns(prev =>
+    setVisibleColumns((prev) =>
       prev.includes(columnKey)
-        ? prev.filter(key => key !== columnKey)
+        ? prev.filter((k) => k !== columnKey)
         : [...prev, columnKey]
     );
   };
 
+  /* ---------------------------------------
+     Export handler
+  --------------------------------------- */
   const handleExport = (format: 'xlsx' | 'csv') => {
     const visibleCols = columns
-      .filter(col => visibleColumns.includes(col.key))
-      .map(col => ({ key: col.key, label: col.label }));
+      .filter((col) => visibleColumns.includes(col.key))
+      .map((col) => ({ key: col.key, label: col.label }));
 
     exportToFile(filteredData, visibleCols, format);
     setIsExportModalOpen(false);
   };
 
-  // ✅ useCallback para evitar bucle infinito
+  /* Evita loop infinito al notificar cambios */
   const handleFilteredDataChange = useCallback((data: any[]) => {
     setFilteredData(data);
   }, []);
 
+  /* ---------------------------------------
+     Render
+  --------------------------------------- */
   if (!products || products.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full p-8">
@@ -128,13 +134,13 @@ const TableView = ({ products }: TableViewProps) => {
         <div className="flex gap-4">
           <button
             onClick={() => navigate('/dashboard/tables')}
-            className="px-4 py-2 bg-amazon-brown text-white rounded-lg hover:bg-amazon-brownLight transition-colors"
+            className="px-4 py-2 bg-amazon-brown text-white rounded-lg hover:bg-amazon-brownLight"
           >
             Ver Tablas Guardadas
           </button>
           <button
             onClick={() => window.dispatchEvent(new CustomEvent('openUploadModal'))}
-            className="px-4 py-2 bg-amazon-orange text-white rounded-lg hover:bg-amazon-orangeLight transition-colors"
+            className="px-4 py-2 bg-amazon-orange text-white rounded-lg hover:bg-amazon-orangeLight"
           >
             Importar Nueva Tabla
           </button>
@@ -145,42 +151,47 @@ const TableView = ({ products }: TableViewProps) => {
 
   return (
     <div className="h-screen flex flex-col pl-4">
+      {/* Barra superior */}
       <div className="flex justify-between items-center h-16 bg-white border-b border-amazon-orange/20 px-4">
         <div className="flex items-center gap-4">
+          {/* Buscador */}
           <div className="relative">
             <Search
               size={20}
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-amazon-orange"
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-amazon-orange"
             />
             <input
               type="text"
               placeholder="Buscar productos..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 rounded-lg w-64 bg-white border border-amazon-orange/30 text-amazon-brown placeholder-amazon-brown/50 focus:outline-none focus:ring-2 focus:ring-amazon-orange focus:border-transparent"
+              className="pl-10 pr-4 py-2 rounded-lg w-64 bg-white border border-amazon-orange/30 text-amazon-brown placeholder-amazon-brown/50 focus:outline-none focus:ring-2 focus:ring-amazon-orange"
             />
           </div>
 
+          {/* Exportar */}
           <button
             onClick={() => setIsExportModalOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amazon-brown text-white hover:bg-amazon-brownLight transition-colors duration-200"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amazon-brown text-white hover:bg-amazon-brownLight"
           >
             <FileDown size={20} />
             <span>Exportar</span>
           </button>
 
+          {/* Filtros */}
           <button
             onClick={() => setIsFilterMenuOpen(true)}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amazon-orange text-white hover:bg-amazon-orangeLight transition-colors duration-200"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amazon-orange text-white hover:bg-amazon-orangeLight"
           >
             <Filter size={20} />
             <span>Filtros</span>
           </button>
 
+          {/* Mostrar/Ocultar columnas */}
           <div className="relative">
             <button
               onClick={() => setIsColumnSelectorOpen(!isColumnSelectorOpen)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amazon-brown text-white hover:bg-amazon-brownLight transition-colors duration-200"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amazon-brown text-white hover:bg-amazon-brownLight"
             >
               <Settings2 size={20} />
               <span>Columnas</span>
@@ -219,6 +230,7 @@ const TableView = ({ products }: TableViewProps) => {
         </div>
       </div>
 
+      {/* Tabla */}
       <div className="flex-1 overflow-hidden">
         <FilterableTable
           columns={columns.filter((col) => visibleColumns.includes(col.key))}
@@ -230,6 +242,7 @@ const TableView = ({ products }: TableViewProps) => {
         />
       </div>
 
+      {/* Modal export */}
       <ExportModal
         isOpen={isExportModalOpen}
         onClose={() => setIsExportModalOpen(false)}

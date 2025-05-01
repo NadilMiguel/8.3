@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useReducer,  useState, useMemo, useEffect, useRef } from 'react';
 import { SortAsc, SortDesc, ExternalLink } from 'lucide-react';
 import { FilterMenu } from './FilterMenu';
 import type { FilterConfig, Column, TableData } from './types';
@@ -26,6 +26,7 @@ export function FilterableTable({
       return normalizedKey !== '__empty_2' && normalizedKey !== '_empty_2';
     });
   }, [initialColumns]);
+  const [, forceUpdate] = useReducer((x: number) => x + 1, 0); // refresh on edit
 
   const [filters, setFilters] = useState<FilterConfig[]>([]);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
@@ -175,6 +176,18 @@ export function FilterableTable({
     currentPage * rowsPerPage
   );
 
+// Editable input handler for 'pack of:' column
+const handleEditableChange = (
+  rowIndex: number,
+  column: Column,
+  value: string
+) => {
+  const num = Math.floor(Number(value));
+  if (Number.isInteger(num) && num >= 1) {
+    paginatedData[rowIndex][column.key] = num;
+    forceUpdate();
+  }
+};
   const getColumnWidth = (columnKey: string): string => {
     const normalizedKey = columnKey.toLowerCase().replace(/\s+/g, '_');
     
@@ -213,7 +226,19 @@ export function FilterableTable({
     }
   };
 
-  const renderCell = (column: Column, value: any) => {
+  const renderCell = (column: Column, value: any, rowIndex: number) => {
+    if ((column as any).editable) {
+  return (
+    <input
+      type="number"
+      min={1}
+      step={1}
+      value={Number(value) || 1}
+      onChange={(e) => handleEditableChange(rowIndex, column, e.target.value)}
+      className="w-20 px-1 py-0.5 border rounded text-center"
+    />
+  );
+}
     if (!value) return '-';
     
     const formattedValue = formatCellValue(value);
@@ -339,7 +364,7 @@ export function FilterableTable({
                     key={column.key}
                     className={`${getColumnWidth(column.key)} px-3 py-1.5 text-gray-900 overflow-hidden`}
                   >
-                    {renderCell(column, row[column.key])}
+                    {renderCell(column, row[column.key], rowIndex)}
                   </td>
                 ))}
               </tr>
